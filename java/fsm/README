@@ -1,0 +1,7 @@
+Simple Finite State Machine designed while helping my dad.
+
+A listener can subscribe to state changes when a state is about to leave or enter.
+The controller takes care of the actual state changing.
+
+Initially written and tested using IntelliJ, but
+I don't know why I ever thought that was a good idea!
