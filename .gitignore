@@ -1,0 +1,15 @@
+# binaries
+*.a
+*.o
+*.img
+# temporaries
+*.tmp
+tmp/
+*.vim
+# tarballs/archives
+*.tar
+*.tar.gz
+*.tar.xz
+*.tgz
+*.xz
+*.zip

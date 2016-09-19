@@ -1,0 +1,22 @@
+Various programming snippets or projects that are one of these things:
+
+* completed and working
+* completed and abandoned
+* not working properly but has useful pieces of code
+
+Yeah, I know this does not say much.
+
+Most files include a reference to the license that applies,
+If no reference is provided, it defaults to public domain.
+
+Whatever the license, if you intend to use any code from this repo,
+I would really appreciate if you mention my name in the credits.
+
+Let me know if you have made something really cool that I need to see!
+If it is a commercial product, I would like to receive a free licensed
+copy (not required, but that would be awesome).
+
+I don't intend to accept pull requests, as this is code written only by
+me and this gives me a lot of freedom. If I change the license of a
+particular file you can always choose to keep using the old version that
+uses the old license.
