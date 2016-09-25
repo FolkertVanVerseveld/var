@@ -12,14 +12,11 @@ void quicksort(int *a, int low, int high) {
 	pivot = a[low + (high-low) / 2];
 	while (i <= j) {
 		while (a[i] < pivot)
-			i++;
+			++i;
 		while (a[j] > pivot)
-			j--;
-		if (i <= j) {
-			swap(&a[i], &a[j]);
-			i++;
-			j--;
-		}
+			--j;
+		if (i <= j)
+			swap(&a[i++], &a[j--]);
 	}
 	if (low < j)
 		quicksort(a, low, j);

@@ -6,6 +6,7 @@
 *.tmp
 tmp/
 *.vim
+*.swp
 # tarballs/archives
 *.tar
 *.tar.gz
