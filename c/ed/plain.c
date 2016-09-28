@@ -5,13 +5,16 @@ simple hex editor supporting:
 * files up to 16 EiB
 * peek 16 bytes at a time
 * poke randomly
+* search for bytes
 * dump file size
 
 commands (XX are hex numbers, ... is variable length):
-XX       peek 16 bytes at XX
-XX XX... poke ... at XX
-q        quit (no spaces; must be first character)
-g        dump file name and size
+XX        peek 16 bytes at XX
+XX XX...  poke ... at XX
+q         quit (no spaces; must be first character)
+g         dump file name and size
+h XX...   search (hunt) for XX...
+hXX XX... search (hunt) for XX... starting at XX
 
 note: all pokes are written directly to the file
 */
@@ -112,6 +115,52 @@ static void peek(size_t fpos, unsigned n)
 	putchar('\n');
 }
 
+static int hunt(unsigned pos)
+{
+	unsigned posp = pos;
+	size_t start = 0;
+	if (isxdigit(cmd[pos])) {
+		sscanf(&cmd[pos], "%zX", &start);
+		while (isxdigit(cmd[pos]))
+			++pos;
+	}
+	if (!isspace(cmd[pos]))
+		return -1;
+	for (++pos; isspace(cmd[pos]); ++pos)
+		;
+	if (!(cmd[pos]))
+		return -1;
+	char pa[CMDBUFSZ];
+	unsigned pai = 0;
+	for (int ch = cmd[pos]; ch; ch = cmd[++pos]) {
+		if (isxdigit(ch)) {
+			ch = cmd[pos + 1];
+			if (ch && isxdigit(ch))
+				pa[pai] = ch2hex(cmd[pos], 0xf) << 4 | ch2hex(ch, 0xf);
+			else
+				pa[pai] = ch2hex(cmd[pos], 0xf);
+			++pai;
+			++pos;
+		} else if (isspace(ch))
+			continue;
+		else
+			return -1;
+	}
+	// naive search
+	size_t fpos, max = mapsz;
+	if (pai > max) {
+		fprintf(stderr, "not found:%s", &cmd[posp]);
+		return 1;
+	}
+	for (fpos = start; fpos <= max - pai; ++fpos)
+		if (map[fpos] == pa[0] && !memcmp(&map[fpos], pa, pai)) {
+			printf("%zX\n", fpos);
+			return 0;
+		}
+	fprintf(stderr, "not found:%s", &cmd[posp]);
+	return 1;
+}
+
 static int parse(void)
 {
 	unsigned pos;
@@ -143,6 +192,8 @@ static int parse(void)
 	case 'g':
 		printf("%s, size: %zX\n", name, mapsz);
 		break;
+	case 'h':
+		return hunt(pos + 1);
 	default: goto fail;
 	}
 ok:
