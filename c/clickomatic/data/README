@@ -1,0 +1,8 @@
+Put all files you want to use in the clickomatic here.
+The clickomatic will traverse the directory looking for files.
+
+The following files are recognized and imported:
+
+file name       purpose
+background.png  ClickOMatic background
+font.png        ASCII font
