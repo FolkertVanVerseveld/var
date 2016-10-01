@@ -21,10 +21,14 @@ static unsigned width = WIDTH, height = HEIGHT;
 static unsigned spr[TEXSZ];
 static GLuint tex[TEXSZ];
 
+static unsigned font_width, font_height;
+
 static ALuint *buf = NULL;
 static ALuint *ch  = NULL;
 
 static size_t nogg;
+
+void draw_str(GLfloat x, GLfloat y, const char *str);
 
 static void sfx_free(void)
 {
@@ -87,6 +91,10 @@ static void display(void)
 	glEnd();
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindTexture(GL_TEXTURE_2D, tex[1]);
+	glBegin(GL_QUADS);
+	draw_str(0, 0, "Click anywhere or press a key\nto hear a random sound");
+	glEnd();
 }
 
 static int sfx_init(void)
@@ -106,6 +114,10 @@ static int sfx_init(void)
 		size_t len = strlen(name);
 		if (len > strlen(".ogg") && !strcmp(".ogg", name + len - strlen(".ogg")))
 			++nogg;
+	}
+	if (!nogg) {
+		smtMsg(SMT_MSG_ERR, 0, "Fatal error", "You need to place some .ogg\nfiles in data/");
+		goto fail;
 	}
 	buf = malloc(nogg * sizeof(ALuint));
 	if (!buf) {
@@ -128,7 +140,6 @@ static int sfx_init(void)
 		ALsizei freq;
 		size_t n;
 		if (len > strlen(".ogg") && !strcmp(".ogg", name + len - strlen(".ogg"))) {
-			puts(name);
 			char fname[256];
 			snprintf(fname, sizeof fname, "data/%s", name);
 			if (smtOggfv(fname, &ogg, &n, &format, &freq)) {
@@ -165,6 +176,7 @@ static int gfx_init(void)
 		goto fail;
 	if (smtCreatespr(&spr[1], 0, 0, name = "data/font.png", tex[1], 0))
 		goto fail;
+	smtGetSizespr(spr[1], &font_width, &font_height, NULL, NULL);
 	return 0;
 fail:
 	snprintf(buf, sizeof buf, "No such file or corrupted:\n%s", name);
@@ -198,6 +210,39 @@ static int fkey(unsigned key)
 		}
 	}
 	return 0;
+}
+
+void draw_str(GLfloat x, GLfloat y, const char *str)
+{
+	GLfloat tx0, tx1, ty0, ty1;
+	unsigned gx, gy, gw, gh;
+	GLfloat tw, th;
+	tw = font_width / 16.0f;
+	th = font_height / 16.0f;
+	gw = 16;
+	gh = 16;
+	GLfloat xp = x;
+	for (; *str; ++str, x += tw) {
+		int ch = *str;
+		while (ch == '\n') {
+			x = xp;
+			y += th;
+			ch = *++str;
+		}
+		gy = ch / gw;
+		gx = ch % gw;
+		tx0 = 1.0f * gx / gw;
+		tx1 = 1.0f * (gx + 1) / gw;
+		ty0 = 1.0f * gy / gh;
+		ty1 = 1.0f * (gy + 1) / gh;
+		GLfloat vx0, vx1, vy0, vy1;
+		vx0 = x; vx1 = x + tw;
+		vy0 = y; vy1 = y + th;
+		glTexCoord2f(tx0, ty0); glVertex2f(vx0, vy0);
+		glTexCoord2f(tx1, ty0); glVertex2f(vx1, vy0);
+		glTexCoord2f(tx1, ty1); glVertex2f(vx1, vy1);
+		glTexCoord2f(tx0, ty1); glVertex2f(vx0, vy1);
+	}
 }
 
 unsigned sfx_play(int nr, unsigned index)
@@ -247,8 +292,12 @@ int main(int argc, char **argv) {
 				if (fkey(smt.kbp.virt))
 					goto end;
 				break;
-			case SMT_EV_KEY_DOWN:
+			case SMT_EV_MOUSE_DOWN:
 				sfx_play(-1, rand() % nogg);
+				break;
+			case SMT_EV_KEY_DOWN:
+				if (smt.kbp.virt != 27 && smt.kbp.virt != SMT_KEY_F(4))
+					sfx_play(-1, rand() % nogg);
 				break;
 			}
 		}
