@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <smt/smt.h>
@@ -10,6 +12,7 @@
 #define TEXSZ 2
 
 #define INIT_GFX 1
+#define INIT_SFX 2
 
 static unsigned win = SMT_RES_INVALID, gl = SMT_RES_INVALID;
 static unsigned init = 0, mode = 0;
@@ -17,6 +20,27 @@ static unsigned x = 0, y = 0;
 static unsigned width = WIDTH, height = HEIGHT;
 static unsigned spr[TEXSZ];
 static GLuint tex[TEXSZ];
+
+static ALuint *buf = NULL;
+static ALuint *ch  = NULL;
+
+static size_t nogg;
+
+static void sfx_free(void)
+{
+	if (!(init & INIT_SFX)) return;
+	init &= ~INIT_SFX;
+	if (buf) {
+		alDeleteBuffers(nogg, buf);
+		free(buf);
+		buf = NULL;
+	}
+	if (ch) {
+		alDeleteSources(nogg, ch);
+		free(ch);
+		ch = NULL;
+	}
+}
 
 static void gfx_free(void)
 {
@@ -32,6 +56,7 @@ static void gfx_free(void)
 
 static void cleanup(void)
 {
+	sfx_free();
 	gfx_free();
 	if (gl != SMT_RES_INVALID) {
 		smtFreegl(gl);
@@ -69,17 +94,60 @@ static int sfx_init(void)
 	int ret = 1;
 	struct dirent **names;
 	int n = scandir("data", &names, NULL, NULL);
+	init |= INIT_SFX;
+	nogg = 0;
 	if (n < 0) {
 		perror("data");
 		goto fail;
 	}
+	// not very efficient, but i'm lazy
+	for (int i = 0; i < n; ++i) {
+		const char *name = names[i]->d_name;
+		size_t len = strlen(name);
+		if (len > strlen(".ogg") && !strcmp(".ogg", name + len - strlen(".ogg")))
+			++nogg;
+	}
+	buf = malloc(nogg * sizeof(ALuint));
+	if (!buf) {
+		fputs("no buffers: out of memory\n", stderr);
+		goto fail;
+	}
+	alGenBuffers(nogg, buf);
+	ch = malloc(nogg * sizeof(ALuint));
+	if (!ch) {
+		fputs("no channels: out of memory\n", stderr);
+		goto fail;
+	}
+	alGenSources(nogg, ch);
+	unsigned o_i = 0;
+	for (int i = 0; i < n; ++i) {
+		const char *name = names[i]->d_name;
+		size_t len = strlen(name);
+		char *ogg;
+		ALenum format;
+		ALsizei freq;
+		size_t n;
+		if (len > strlen(".ogg") && !strcmp(".ogg", name + len - strlen(".ogg"))) {
+			puts(name);
+			char fname[256];
+			snprintf(fname, sizeof fname, "data/%s", name);
+			if (smtOggfv(fname, &ogg, &n, &format, &freq)) {
+				char msg[256];
+				snprintf(msg, sizeof msg, "invalid clip: %s\n", fname);
+				fputs(msg, stderr);
+				smtMsg(SMT_MSG_ERR, 0, "Fatal error", msg);
+				goto fail;
+			}
+			alBufferData(buf[o_i], format, ogg, n, freq);
+			free(ogg);
+			++o_i;
+		}
+	}
 	ret = 0;
 fail:
 	if (n) {
-		for (int i = 0; i < n; ++i) {
-			printf("%4hu %s\n", names[i]->d_reclen, names[i]->d_name);
+		for (int i = 0; i < n; ++i)
 			free(names[i]);
-		}
 		free(names);
 	}
 	return ret;
@@ -132,6 +200,30 @@ static int fkey(unsigned key)
 	return 0;
 }
 
+unsigned sfx_play(int nr, unsigned index)
+{
+	if (index >= nogg) {
+		fprintf(stderr, "sfx: bad index: %u\n", index);
+		return -1;
+	}
+	if (nr < 0) {
+		nr = 0; // default channel
+		for (unsigned i = 0; i < nogg; ++i) {
+			ALint state;
+			alGetSourcei(ch[i], AL_SOURCE_STATE, &state);
+			if (state == AL_PLAYING)
+				continue;
+			nr = i;
+			break;
+		}
+	} else if (nr > 0)
+		nr %= nogg;
+	ALuint src = ch[nr];
+	alSourcei(src, AL_BUFFER, buf[index]);
+	alSourcePlay(src);
+	return nr;
+}
+
 int main(int argc, char **argv) {
 	int ret = 1;
 	ret = smtInit(&argc, argv);
@@ -145,6 +237,7 @@ int main(int argc, char **argv) {
 		goto fail;
 	if (sfx_init())
 		goto fail;
+	srand(time(NULL));
 	while (1) {
 		unsigned ev;
 		while ((ev = smtPollev()) != SMT_EV_DONE) {
@@ -154,6 +247,9 @@ int main(int argc, char **argv) {
 				if (fkey(smt.kbp.virt))
 					goto end;
 				break;
+			case SMT_EV_KEY_DOWN:
+				sfx_play(-1, rand() % nogg);
+				break;
 			}
 		}
 		fetchbounds();
@@ -161,6 +257,7 @@ int main(int argc, char **argv) {
 		smtSwapgl(win);
 	}
 end:
+	ret = 0;
 fail:
 	cleanup();
 	return ret;
