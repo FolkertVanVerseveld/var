@@ -4,8 +4,8 @@
 #define K 10
 
 void rsort(int *a, unsigned n) {
-	int m, exp, bb[K];
-	unsigned i, *b;
+	int m, exp, bb[K], *b;
+	unsigned i;
 	b = malloc(n * sizeof(int));
 	for (m = a[0], exp = i = 1; i < n; ++i)
 		if (a[i] > m)
