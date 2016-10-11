@@ -20,8 +20,7 @@ void rsort(int *a, unsigned n) {
 			--i;
 			b[--bb[(a[i] / exp) % K]] = a[i];
 		}
-		for (i = 0; i < n; ++i)
-			a[i] = b[i];
+		memcpy(a, b, n * sizeof(int));
 		exp *= K;
 #ifdef DEBUG
 		printf("pass");
