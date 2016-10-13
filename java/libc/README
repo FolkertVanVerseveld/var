@@ -1,0 +1,6 @@
+Wrappers and missing features that the C standard library provides.
+This directory also contains samples that demonstrate static imports.
+
+Please note that printf and variants by default do *not* return the
+number of characters written since it is very costly in Java to keep
+track of this.
