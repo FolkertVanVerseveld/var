@@ -7,6 +7,7 @@ simple hex editor supporting:
 * poke randomly
 * search for bytes
 * dump file size
+* truncate file
 
 commands (XX are hex numbers, ... is variable length):
 XX        peek 16 bytes at XX
@@ -15,9 +16,12 @@ q         quit (no spaces; must be first character)
 g         dump file name and size
 h XX...   search (hunt) for XX...
 hXX XX... search (hunt) for XX... starting at XX
+tXX       truncate file to XX bytes
 
 note: all pokes are written directly to the file
 */
+#define _GNU_SOURCE
+#include <assert.h>
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -161,6 +165,40 @@ static int hunt(unsigned pos)
 	return 1;
 }
 
+static int ftrunc(unsigned pos)
+{
+	if (flags & READONLY) {
+		fputs("readonly\n", stderr);
+		return 1;
+	}
+	size_t size = mapsz;
+	if (isxdigit(cmd[pos])) {
+		sscanf(&cmd[pos], "%zX", &size);
+		while (isxdigit(cmd[pos]))
+			++pos;
+	}
+	if (cmd[pos] != '\n' && cmd[pos])
+		return -1;
+	if (size == mapsz)
+		return 0;
+	if (ftruncate(fd, size)) {
+		perror("can't truncate");
+		return 1;
+	}
+	char *nmap = mremap(map, mapsz, size, MREMAP_MAYMOVE);
+	if (nmap == MAP_FAILED) {
+		perror("can't truncate");
+		exit(1);
+	}
+	if (map != nmap)
+		memcpy(nmap, map, mapsz);
+	if (msync(map, mapsz, MS_SYNC))
+		perror("can't sync");
+	map = nmap;
+	mapsz = size;
+	return 0;
+}
+
 static int parse(void)
 {
 	unsigned pos;
@@ -189,11 +227,16 @@ static int parse(void)
 		goto ok;
 	}
 	switch (cmd[pos]) {
-	case 'g':
-		printf("%s, size: %zX\n", name, mapsz);
+	case 'g': {
+		struct stat st;
+		fstat(fd, &st);
+		printf("%s, size: %zX\n", name, st.st_size);
 		break;
+	}
 	case 'h':
 		return hunt(pos + 1);
+	case 't':
+		return ftrunc(pos + 1);
 	default: goto fail;
 	}
 ok:
