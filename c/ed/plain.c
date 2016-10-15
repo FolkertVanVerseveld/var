@@ -17,8 +17,10 @@ g         dump file name and size
 h XX...   search (hunt) for XX...
 hXX XX... search (hunt) for XX... starting at XX
 tXX       truncate file to XX bytes
+mYY XX n  move N bytes from XX to YY
 
-note: all pokes are written directly to the file
+note: all write operations are directly executed
+note: you can *not* undo any operation
 */
 #define _GNU_SOURCE
 #include <assert.h>
@@ -75,7 +77,10 @@ static int poke(size_t fpos, unsigned pos)
 		return 1;
 	}
 	if (fpos >= mapsz) {
-		fprintf(stderr, "%zX: too large (max: %zX)\n", fpos, mapsz - 1);
+		if (!mapsz)
+			fputs("file empty\n", stderr);
+		else
+			fprintf(stderr, "%zX: too large (max: %zX)\n", fpos, mapsz - 1);
 		return 1;
 	}
 	size_t max = mapsz - fpos;
@@ -171,6 +176,8 @@ static int ftrunc(unsigned pos)
 		fputs("readonly\n", stderr);
 		return 1;
 	}
+	if (!cmd[pos])
+		return -1;
 	size_t size = mapsz;
 	if (isxdigit(cmd[pos])) {
 		sscanf(&cmd[pos], "%zX", &size);
@@ -196,6 +203,57 @@ static int ftrunc(unsigned pos)
 		perror("can't sync");
 	map = nmap;
 	mapsz = size;
+	return 0;
+}
+
+static int bmove(unsigned pos)
+{
+	if (flags & READONLY) {
+		fputs("readonly\n", stderr);
+		return 1;
+	}
+	if (!isxdigit(cmd[pos]))
+		return -1;
+	size_t n, ofrom, oto;
+	sscanf(&cmd[pos], "%zX", &oto);
+	while (isxdigit(cmd[pos]))
+		++pos;
+	if (!cmd[pos] || !isspace(cmd[pos]))
+		return -1;
+	while (isspace(cmd[pos]))
+		++pos;
+	if (!isxdigit(cmd[pos]))
+		return -1;
+	sscanf(&cmd[pos], "%zX", &ofrom);
+	while (isxdigit(cmd[pos]))
+		++pos;
+	if (!cmd[pos] || !isspace(cmd[pos]))
+		return -1;
+	while (isspace(cmd[pos]))
+		++pos;
+	if (!isxdigit(cmd[pos]))
+		return -1;
+	sscanf(&cmd[pos], "%zX", &n);
+	if (n >= mapsz) {
+		if (!mapsz)
+			fputs("file empty\n", stderr);
+		else
+			fprintf(stderr, "block too large: %zX (max: %zX)\n", n, mapsz - 1);
+		return 1;
+	}
+	if (ofrom == oto)
+		return 0;
+	size_t max = mapsz - n;
+	if (ofrom > max) {
+		fprintf(stderr, "bad source: %zX (max: %zX)\n", ofrom, max);
+		return 1;
+	}
+	if (oto > max) {
+		fprintf(stderr, "bad dest: %zX (max: %zX)\n", oto, max);
+		return 1;
+	}
+	memmove(&map[oto], &map[ofrom], n);
+	printf("moved %zX bytes from %zX to %zX\n", n, ofrom, oto);
 	return 0;
 }
 
@@ -237,6 +295,8 @@ static int parse(void)
 		return hunt(pos + 1);
 	case 't':
 		return ftrunc(pos + 1);
+	case 'm':
+		return bmove(pos + 1);
 	default: goto fail;
 	}
 ok:
