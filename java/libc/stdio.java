@@ -51,8 +51,12 @@ public class stdio {
 
 	public static int snprintf(StringBuilder sb, int n, String f, Object... args) {
 		String arg = String.format(f, args);
-		sb.append(arg.substring(0, n));
-		return arg.length() > n ? n : arg.length();
+		if (arg.length() > n) {
+			sb.append(arg.substring(0, n));
+			return n;
+		}
+		sb.append(arg);
+		return arg.length();
 	}
 
 	public static void main(String args[]) {
