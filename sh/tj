@@ -1,0 +1,4 @@
+#!/bin/sh -e
+rm -f index.html
+wget www.fileoverzicht.mobi
+awk '/id=\"content\"/{y=1;next}/Mobiele weergave/{y=0}y' index.html | \grep -P -o '\>[A-Za-z.,\- ]*[0-9\.]* km[A-Za-z.,\- ]*<|Het totaal aantal files is [a-z0-9 ]* km\.' | sed -e 's/^>//' -e 's/<$//'
