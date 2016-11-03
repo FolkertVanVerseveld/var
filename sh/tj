@@ -1,4 +1,5 @@
 #!/bin/sh -e
 rm -f index.html
-wget www.fileoverzicht.mobi
-awk '/id=\"content\"/{y=1;next}/Mobiele weergave/{y=0}y' index.html | \grep -P -o '\>[A-Za-z.,\- ]*[0-9\.]* km[A-Za-z.,\- ]*<' | sed -e 's/^>//' -e 's/<$//'
+wget fileoverzicht.mobi
+awk '/id=\"content\"/{y=1;next}/Mobiele weergave/{y=0}y' index.html | grep -P -o '\>[A-Za-z.,\- ]*[0-9\.]* km[A-Za-z.,\- ]*<' | sed -e 's/^>//' -e 's/<$//'
+printf "Totaal: %s km\n" "$(echo $(awk '/id=\"content\"/{y=1;next}/Mobiele weergave/{y=0}y' index.html | grep -P -o '[0-9\.]* km' | sed -e 's/107 km$//' -e 's/km/+/') 0 | bc)"
