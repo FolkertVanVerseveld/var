@@ -3,6 +3,7 @@
 CC=gcc
 cstd='-std=gnu99'
 CFLAGS="-Wall -Wextra -pedantic $cstd $*"
+LDLIBS=-lm
 INCS=
 cat <<END >.gitignore
 # Created by build script. Modifications are lost when rerun.
@@ -22,6 +23,7 @@ cat <<END >Makefile
 
 CC?=$CC
 CFLAGS=$CFLAGS
+LDLIBS=$LDLIBS
 
 END
 
