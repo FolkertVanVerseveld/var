@@ -1,0 +1,11 @@
+Traffic jam statistics logger
+
+Includes a logger cron job and a statistics analyser.
+
+You can integrate this logger for cron job using e.g.:
+*/5 * * * * cd /home/you/log && sh tj
+
+This will poll traffic jams each 5 minutes
+
+Show all jams: ./stat -t year/month/day
+Show all jams on A2: ./stat -fA2 year/month/day

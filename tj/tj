@@ -1,9 +1,11 @@
 #!/bin/sh -e
 rm -f index.html
-wget fileoverzicht.mobi
-name=$(date +%Y%m%d-%H%M%S)
+wget -q fileoverzicht.mobi
+dir=$(date +%Y/%m/%d)
+name=$dir/$(date +%H%M)
 files=$(awk '/<h2>Alle files/{++n}n==2{print;++n}' index.html | grep -P -o '<div class="fileItem">.*</div>' | sed -e 's/<span style="font-size: [0-9]*px;">&rarr;<\/span>/naar/g' | grep -P -o '<h3>[A-Z0-9]*:[ A-Za-z0-9]*</h3>[ A-Za-z0-9\-,\.]*</div>')
 summary=$(echo "$files" | sed -e 's/<h3>//g' -e 's/<\/h3>[ A-Za-z0-9\.\-]*tussen/:/g' -e 's/<\/div>//g')
-echo "$summary" | sed -e 's/^\s*//g' | tee "$name"
-printf "Totaal: %s km\n" "$(echo $(awk '/<h2>Alle files/{++n}n==2{print;++n}' index.html | grep -P -o '[0-9\.]* km' | sed -e 's/km/+/') 0 | bc)" | tee -a "$name"
-mv index.html "$name".html
+mkdir -p "$dir" html/"$dir"
+echo "$summary" | sed -e 's/^\s*//g' >"$name"
+printf "Totaal: %s km\n" "$(echo $(awk '/<h2>Alle files/{++n}n==2{print;++n}' index.html | grep -P -o '[0-9\.]* km' | sed -e 's/km/+/') 0 | bc)" >>"$name"
+mv index.html html/"$name".html
