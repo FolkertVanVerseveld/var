@@ -18,11 +18,14 @@ h XX...   search (hunt) for XX...
 hXX XX... search (hunt) for XX... starting at XX
 tXX       truncate file to XX bytes
 mYY XX n  move N bytes from XX to YY
+v         start visual environment using ncurses
 
 note: all write operations are directly executed
 note: you can *not* undo any operation
 */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <assert.h>
 #include <ctype.h>
 #include <stddef.h>
@@ -34,6 +37,7 @@ note: you can *not* undo any operation
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include "view.h"
 
 #define CMDBUFSZ 80
 
@@ -297,6 +301,8 @@ static int parse(void)
 		return ftrunc(pos + 1);
 	case 'm':
 		return bmove(pos + 1);
+	case 'v':
+		return visual();
 	default: goto fail;
 	}
 ok:
