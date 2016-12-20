@@ -20,14 +20,12 @@ void bsort(int *a, unsigned n) {
 		b[j][bn[j]++] = a[i];
 	}
 	r = 0;
-	for (i = 0; i < K; ++i) {
+	for (i = 0; i < K; ++i)
 		for (j = 0; j < bn[i]; ++j)
 			a[r++] = b[i][j];
-	}
-	for (i = 1; i < n; ++i) {
+	for (i = 1; i < n; ++i)
 		for (j = i; j > 0 && a[j - 1] > a[j]; --j)
 			swap(&a[j], &a[j - 1]);
-	}
 	free(bb);
 }
 
