@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #define OPT_LIST 1
+#define OPT_SLOW 2
 
 extern unsigned flags;
 

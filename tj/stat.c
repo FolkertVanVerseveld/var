@@ -10,7 +10,7 @@
 #include <getopt.h>
 #include "scan.h"
 
-unsigned flags = 0;
+unsigned flags = OPT_SLOW;
 
 static int walk(const char *name, const void *data, size_t n)
 {
@@ -41,12 +41,23 @@ static int walk(const char *name, const void *data, size_t n)
 		if (!km)
 			goto next;
 		*km = '\0';
+		char *type = km + strlen(" km,") + 1;
 		while (!isspace(*km))
 			--km;
 		++km;
 		int length = atoi(km);
 		if (length < 0)
 			goto next;
+		char *vk = strstr(type, "verkeer");
+		if (vk) {
+			while (!isspace(*vk))
+				--vk;
+			*vk = '\0';
+			while (isspace(*type))
+				++type;
+			if (!strcmp("Langzaam rijdend", type) && !(flags & OPT_SLOW))
+				goto next;
+		}
 		if (parse(name, str, from, to, (unsigned)length))
 			goto next;
 next:
@@ -57,6 +68,7 @@ next:
 
 static struct option long_opt[] = {
 	{"help", no_argument, 0, 'h'},
+	{"list", no_argument, 0, 't'},
 	{0, 0, 0, 0},
 };
 
@@ -65,7 +77,7 @@ static int parse_opt(int argc, char **argv)
 	int c;
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "f:t", long_opt, &option_index);
+		c = getopt_long(argc, argv, "f:tj", long_opt, &option_index);
 		if (c == -1) break;
 		switch (c) {
 		case 'f':
@@ -73,6 +85,9 @@ static int parse_opt(int argc, char **argv)
 			break;
 		case 't':
 			flags |= OPT_LIST;
+			break;
+		case 'j':
+			flags &= ~OPT_SLOW;
 			break;
 		case 'h':
 			printf("usage: %s dir\n", argc > 0 ? argv[0] : "stat");
