@@ -1,0 +1,7 @@
+Programs for argument parsing during startup.
+
+Arguments can be provided in multiple ways: starting with a single or double
+dash, key-value arguments like key=value, key value or keyvalue.
+
+Not all mentioned formattings are supported. The programs are self-contained and
+small enough to just look up the source code to see if it is supported.

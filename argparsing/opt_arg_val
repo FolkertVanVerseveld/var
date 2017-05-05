@@ -1,0 +1,29 @@
+#!/bin/sh
+# Simple argument parsing. It should work on any shell.
+# If `shift 1' imposes problems, replace it with just `shift'.
+#
+# License: public domain
+usage() {
+cat <<'EOF'
+tool
+Usage: tool [options] command
+
+Provide your general information here...
+
+Commands:
+  help - this info
+  echo - print provided arguments
+EOF
+}
+case $1 in
+	help)
+		usage;;
+	echo)
+		shift 1
+		echo "$@"
+		;;
+	*)
+		echo Unknown option: "$1" >&2
+		exit 1
+		;;
+esac
