@@ -23,7 +23,7 @@ public:
 		const std::set<std::string> &options,
 		const std::map<std::string, std::string> &aliases
 	) : flags(flags), options(options), aliases(aliases), bad(false) {}
-	int parse(int argc, char **argv, int start = 0);
+	int parse(int argc, char **argv, int start = 1);
 };
 
 int option_parser::parse(int argc, char **argv, int start)
@@ -62,7 +62,7 @@ int option_parser::parse(int argc, char **argv, int start)
 			bad = true;
 			break;
 		}
-		enabled_options.emplace(arg_expanded, argv[i + 1]);
+		enabled_options.emplace(arg_expanded, argv[++i]);
 	}
 	return i;
 }
