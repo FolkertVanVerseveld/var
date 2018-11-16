@@ -1,22 +1,17 @@
-Various programming snippets or projects that are one of these things:
+Various programming snippets or projects that I've been using when I want to
+start a new project quickly or I need a simple hack because the language I'm
+using sucks or doesn't provide support for certain features.
 
-* completed and working
-* completed and abandoned
-* not working properly but has useful pieces of code
+Most files include a reference to the license that applies, but if no reference
+is provided, it defaults to public domain.
 
-Yeah, I know this does not say much.
+Whatever the license, if you intend to use any code from this repo, I would
+really appreciate if you mention my name in the credits.
 
-Most files include a reference to the license that applies,
-If no reference is provided, it defaults to public domain.
+Let me know if you have made something really cool that I need to see!  If it is
+a commercial product, I would like to receive a free licensed copy (not
+required, but that would be awesome).
 
-Whatever the license, if you intend to use any code from this repo,
-I would really appreciate if you mention my name in the credits.
-
-Let me know if you have made something really cool that I need to see!
-If it is a commercial product, I would like to receive a free licensed
-copy (not required, but that would be awesome).
-
-I don't intend to accept pull requests, as this is code written only by
-me and this gives me a lot of freedom. If I change the license of a
-particular file you can always choose to keep using the old version that
-uses the old license.
+I don't intend to accept pull requests, as this is code written only by me and
+this gives me a lot of freedom. If I change the license of a particular file you
+can always choose to keep using the old version that uses the old license.
