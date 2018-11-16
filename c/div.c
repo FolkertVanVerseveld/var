@@ -4,27 +4,27 @@
 #include <inttypes.h>
 
 struct mydiv_t {
-	uint8_t quot;
-	uint8_t rem;
+	uint16_t quot;
+	uint16_t rem;
 };
 
-struct mydiv_t mydiv(uint8_t numerator, uint8_t denominator)
+struct mydiv_t mydiv(uint16_t numerator, uint16_t denominator)
 {
 	struct mydiv_t d;
-	uint8_t quotient;
-	uint16_t divisor, remainder, parity_mask;
+	uint16_t quotient;
+	uint32_t divisor, remainder, parity_mask;
 
 	quotient = 0;
 	divisor = denominator << (sizeof(denominator) * 8);
 	remainder = numerator;
-	parity_mask = ~(((uint16_t)-1) >> 1);
+	parity_mask = ~(((uint32_t)-1) >> 1);
 
-	//printf("%2" PRIX8 ", %4" PRIX16 ", %4" PRIX16 ", %4" PRIX16 "\n", quotient, divisor, remainder, parity_mask);
+	//printf("%4" PRIX16 ", %8" PRIX32 ", %8" PRIX32 ", %8" PRIX32 "\n", quotient, divisor, remainder, parity_mask);
 
 	for (unsigned i = 0; i <= sizeof(numerator) * 8; ++i) {
-		uint16_t remainder_next = remainder - divisor;
+		uint32_t remainder_next = remainder - divisor;
 
-		//printf("next: %4" PRIX16 "\n", remainder_next);
+		//printf("next: %8" PRIX32 "\n", remainder_next);
 
 		// Restore if negative.
 		if (remainder_next & parity_mask) {
@@ -48,23 +48,31 @@ struct mydiv_t mydiv(uint8_t numerator, uint8_t denominator)
 
 void mydiv_dump(struct mydiv_t *d)
 {
-	printf("%" PRIu8 " rest %" PRIu8 "\n", d->quot, d->rem);
+	printf("%" PRIu16 " rest %" PRIu16 "\n", d->quot, d->rem);
 }
 
 int main(void)
 {
-	for (unsigned numerator = 0; numerator <= INT8_MAX; ++numerator) {
-		for (unsigned denominator = 0; denominator <= INT8_MAX; ++denominator) {
-			if (denominator == 0)
-				continue;
+	/* NOTE: this algorithm does not work for signed division! And either
+	 * the numerator or denominator may not have their most significant bit
+	 * set (I don't know the specifics for sure, but it does not work
+	 * otherwise.
+	 */
 
+	/*
+	 * This test takes about half a minute to run on an Intel Core
+	 * i7-7700HQ. It tests all possible values in the range [0, 32767] and
+	 * [1, 32767] for the numerator and denominator respectively.
+	 */
+	for (unsigned numerator = 0; numerator <= INT16_MAX; ++numerator) {
+		for (unsigned denominator = 1; denominator <= INT16_MAX; ++denominator) {
 			struct mydiv_t d = mydiv(numerator, denominator);
 			div_t d2 = div(numerator, denominator);
 
 			if (d.quot != d2.quot || d.rem != d2.rem) {
 				fprintf(
 					stderr,
-					"Div fails for divisor = %u, dividend = %u: got: %" PRIu8 ", %" PRIu8 " but expected: %u, %u\n",
+					"Div fails for divisor = %u, dividend = %u: got: %" PRIu16 ", %" PRIu16 " but expected: %u, %u\n",
 					numerator, denominator, d.quot, d.rem, d2.quot, d2.rem
 				);
 				//return 1;
