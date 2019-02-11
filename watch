@@ -1,0 +1,12 @@
+#!/bin/bash
+
+while :; do
+	inotifywait -qre modify *.c
+	make run
+	if [ $? -ne 0 ]; then
+		echo -------------
+		echo
+		continue
+	fi
+	echo
+done

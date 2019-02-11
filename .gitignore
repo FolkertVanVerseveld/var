@@ -1,4 +1,6 @@
 # binaries
+rsa
+test
 *.a
 *.o
 *.img
