@@ -1,7 +1,7 @@
 .PHONY: default clean
 
 CC=gcc
-CFLAGS=-Wall -Wextra -pedantic -std=gnu99 -DDEBUG
+CFLAGS=-Wall -Wextra -pedantic -std=gnu99 -g -DDEBUG
 LDLIBS=-lgmp
 
 BIN=test rsa

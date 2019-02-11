@@ -3,25 +3,32 @@ TODO rsa encryption/decryption demo
 TODO rip java biginteger prime generation
 */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <gmp.h>
 
+#define GK_TRIES 5
 #define KP_TRIES 100
 
-int gen_keypair(gmp_randstate_t *prng, mpz_t *p, mpz_t *q)
+int gen_keypair(mpz_t *pub, mpz_t *priv, mpz_t *k, gmp_randstate_t *prng, const mpz_t p, const mpz_t q)
 {
 	int err = 1;
-	unsigned i;
+	unsigned i, runs = GK_TRIES;
 	mpz_t a, b, g, e, e2, e0, i0, i1, phi, phi2, rem, x, y;
 	mpz_inits(a, b, g, e, e2, e0, i0, i1, phi, phi2, rem, x, y, NULL);
 
-	mpz_sub_ui(i0, *p, 1);
-	mpz_sub_ui(i1, *q, 1);
+again:
+	mpz_sub_ui(i0, p, 1);
+	mpz_sub_ui(i1, q, 1);
+
+	if (!runs--)
+		goto fail;
 
 	// compute totient of n: phi = (p-1) * (q-1)
 	mpz_mul(phi, i0, i1);
 
+	// try to find random e in range [1, phi) such that e and phi are coprime
 	for (i = 0; mpz_cmp_ui(g, 1) && i < KP_TRIES; ++i) {
-		// choose integer e such that e and phi(n) are coprime
 		mpz_urandomm(e0, *prng, phi);
 		mpz_add_ui(e, e0, 1);
 
@@ -39,16 +46,7 @@ int gen_keypair(gmp_randstate_t *prng, mpz_t *p, mpz_t *q)
 	if (i == KP_TRIES)
 		goto fail;
 
-	// TODO compute multiplicative_inverse
-	// alias d to g
-	// alias x1 to a
-	// alias x2 to b
-	// alias y1 to e0
-	// alias rem to temp_phi
-	// alias i0 to temp1
-	// alias i1 to temp2
-	// alias e2 to e
-	// alias phi2 to phi
+	// compute multiplicative_inverse
 	mpz_set(e2, e);
 	mpz_set(phi2, phi);
 
@@ -80,23 +78,18 @@ int gen_keypair(gmp_randstate_t *prng, mpz_t *p, mpz_t *q)
 		mpz_set(e0, y);
 	}
 	if (mpz_cmp_ui(rem, 1)) {
-		fputs("bad temp_phi:", stderr);
-		mpz_out_str(stderr, 10, rem);
-		fputc('\n', stderr);
+		gmp_fprintf(stderr, "bad temp_phi: %Zd\n", rem);
 		goto fail;
 	}
 
-	// alias x to d
-	mpz_add(x, g, phi2);
-	mpz_mul(a, *p, *q);
+	// store result
+	mpz_add(*priv, g, phi2);
+	mpz_mul(*k, p, q);
+	mpz_set(*pub, e);
 
-	fputs("public key: (", stdout);
-	mpz_out_str(stdout, 10, e);
-	fputs(", ", stdout);
-	mpz_out_str(stdout, 10, a);
-	fputs(")\n", stdout);
-
-	mpz_out_str(stdout, 10, x);
+	// ensure the private and public key are distinct
+	if (mpz_cmp(*priv, *pub) == 0)
+		goto again;
 
 	err = 0;
 fail:
@@ -108,20 +101,112 @@ fail:
 	return err;
 }
 
+void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t priv, const mpz_t m)
+{
+	// TODO use dst
+	size_t elemsz;
+	mpz_t base, elem;
+	const unsigned char *data;
+	char *basebuf;
+	mpz_init(base);
+	mpz_init(elem);
+
+	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
+	basebuf = malloc(elemsz + 1);
+	data = src;
+
+	for (size_t i = 0; i < size; ++i) {
+		mpz_set_ui(base, data[i]);
+		mpz_powm(elem, base, pub, m);
+
+		memset(basebuf, 0, elemsz);
+		mpz_get_str(basebuf, 16, elem);
+
+		printf("%s ", basebuf);
+
+		// decrypt just to show it works
+		unsigned long long v;
+		sscanf(basebuf, "%llX", &v);
+
+		mpz_set_ui(base, v);
+		mpz_powm(elem, base, priv, m);
+
+		memset(basebuf, 0, elemsz);
+		mpz_get_str(basebuf, 16, elem);
+
+		unsigned ch;
+		sscanf(basebuf, "%X", &ch);
+
+		printf("[%c] ", ch);
+	}
+	putchar('\n');
+
+	free(basebuf);
+	mpz_clear(elem);
+	mpz_clear(base);
+}
+
+int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
+{
+	int err = 1;
+	size_t msglen, elemsz, bufsz;
+	char *basebuf = NULL, *buf = NULL;
+	mpz_t base, elem;
+	mpz_init(base);
+	mpz_init(elem);
+
+	msglen = strlen(msg);
+	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
+	bufsz = (msglen + 1) * elemsz;
+
+	if (!(buf = malloc(bufsz)))
+		goto fail;
+
+	printf("blk len: %zu (orig: %zu, elem: %zu)\n", msglen, msglen, elemsz);
+
+	rsa_encrypt(buf, msg, msglen + 1, pub, priv, m);
+
+	err = 0;
+fail:
+	free(basebuf);
+	free(buf);
+	mpz_clear(elem);
+	mpz_clear(base);
+	return err;
+}
+
 int main(void)
 {
+	int err;
 	gmp_randstate_t prng;
 	gmp_randinit_mt(prng);
 
-	mpz_t p, q;
-	mpz_inits(p, q, NULL);
+	mpz_t p, q, pub, priv, m;
+	mpz_inits(p, q, pub, priv, m, NULL);
 
 	mpz_set_ui(p, 23);
 	mpz_set_ui(q, 19);
 
-	gen_keypair(&prng, &p, &q);
+	err = gen_keypair(&pub, &priv, &m, &prng, p, q);
+	if (err)
+		goto fail;
+	// dump keys
+	gmp_printf("public key: (%Zd, %Zd)\n", pub, m);
+	gmp_printf("private key: (%Zd, %Zd)\n", priv, m);
 
-	mpz_clears(p, q, NULL);
+	err = test_rsa("whoah", pub, priv, m);
+	if (err)
+		goto fail;
+	err = test_rsa("Mah BOI, this is what all true warriors strive FOR! WhoaHaHahaHaHAHA", pub, priv, m);
+	if (err)
+		goto fail;
+	err = test_rsa("Je kan lekker niet verslaan!", pub, priv, m);
+	if (err)
+		goto fail;
+
+	err = 0;
+fail:
+	mpz_clears(m, priv, pub, q, p, NULL);
 	gmp_randclear(prng);
-	return 0;
+	return err;
 }
