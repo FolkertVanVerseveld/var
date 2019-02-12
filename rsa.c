@@ -101,9 +101,8 @@ fail:
 	return err;
 }
 
-void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t priv, const mpz_t m)
+void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t m)
 {
-	// TODO use dst
 	size_t elemsz, dstsz = 0;
 	mpz_t base, elem;
 	const unsigned char *data;
@@ -127,40 +126,43 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 		size_t nhex = strlen(basebuf);
 		size_t pad = elemsz - nhex;
 
-		printf("%s (%zu) ", basebuf, pad);
-
 		// dst <- elem
 		while (pad --> 0)
 			*dst++ = '0';
 		for (const char *dig = basebuf; *dig; ++dig)
 			*dst++ = *dig;
-
-		// decrypt just to show it works
-		unsigned long long v;
-		sscanf(basebuf, "%llX", &v);
-
-		mpz_set_ui(base, v);
-		mpz_powm(elem, base, priv, m);
-
-		memset(basebuf, 0, elemsz);
-		mpz_get_str(basebuf, 16, elem);
-
-		unsigned ch;
-		sscanf(basebuf, "%X", &ch);
-
-		printf("[%c] ", ch);
-		dstsz += elemsz;
 	}
-	putchar('\n');
-
-	printf("dstsz: %zu\n", dstsz);
-	// dump destination buffer
-	for (size_t i = 0; i < dstsz; ++i)
-		putchar(dst2[i]);
-	putchar('\n');
 
 	free(basebuf);
 	mpz_clear(elem);
+	mpz_clear(base);
+}
+
+void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, const mpz_t m)
+{
+	size_t elemsz;
+	mpz_t base, ch;
+	char *basebuf;
+	mpz_init(base);
+	mpz_init(ch);
+
+	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
+	basebuf = malloc(elemsz + 1);
+
+	for (size_t i = 0; i < size; i += elemsz) {
+		strncpy(basebuf, &blk[i], elemsz + 1);
+		basebuf[elemsz] = '\0';
+
+		mpz_set_str(base, basebuf, 16);
+
+		mpz_powm(ch, base, priv, m);
+
+		*dst++ = mpz_get_ui(ch);
+	}
+	// plain = [chr(pow(char, key, n)) for char in ciphertext]
+
+	free(basebuf);
+	mpz_clear(ch);
 	mpz_clear(base);
 }
 
@@ -168,7 +170,7 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 {
 	int err = 1;
 	size_t msglen, elemsz, bufsz;
-	char *basebuf = NULL, *buf = NULL;
+	char *basebuf = NULL, *buf = NULL, *orig = NULL;
 	mpz_t base, elem;
 	mpz_init(base);
 	mpz_init(elem);
@@ -177,15 +179,20 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
 	bufsz = (msglen + 1) * elemsz;
 
-	if (!(buf = malloc(bufsz)))
+	if (!(buf = malloc(bufsz)) || !(orig = malloc(msglen + 1)))
 		goto fail;
 
 	printf("blk len: %zu (orig: %zu, elem: %zu)\n", bufsz, msglen, elemsz);
 
-	rsa_encrypt(buf, msg, msglen + 1, pub, priv, m);
+	rsa_encrypt(buf, msg, msglen + 1, pub, m);
+	rsa_decrypt(orig, buf, bufsz, priv, m);
+	printf("decrypted: %s\n", orig);
+
+	puts(strcmp(msg, orig) ? "fail" : "ok");
 
 	err = 0;
 fail:
+	free(orig);
 	free(basebuf);
 	free(buf);
 	mpz_clear(elem);
