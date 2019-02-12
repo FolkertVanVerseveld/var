@@ -104,10 +104,10 @@ fail:
 void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t priv, const mpz_t m)
 {
 	// TODO use dst
-	size_t elemsz;
+	size_t elemsz, dstsz = 0;
 	mpz_t base, elem;
 	const unsigned char *data;
-	char *basebuf;
+	char *basebuf, *dst2 = dst;
 	mpz_init(base);
 	mpz_init(elem);
 
@@ -122,7 +122,18 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 		memset(basebuf, 0, elemsz);
 		mpz_get_str(basebuf, 16, elem);
 
-		printf("%s ", basebuf);
+		// compression step
+		// determine length
+		size_t nhex = strlen(basebuf);
+		size_t pad = elemsz - nhex;
+
+		printf("%s (%zu) ", basebuf, pad);
+
+		// dst <- elem
+		while (pad --> 0)
+			*dst++ = '0';
+		for (const char *dig = basebuf; *dig; ++dig)
+			*dst++ = *dig;
 
 		// decrypt just to show it works
 		unsigned long long v;
@@ -138,7 +149,14 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 		sscanf(basebuf, "%X", &ch);
 
 		printf("[%c] ", ch);
+		dstsz += elemsz;
 	}
+	putchar('\n');
+
+	printf("dstsz: %zu\n", dstsz);
+	// dump destination buffer
+	for (size_t i = 0; i < dstsz; ++i)
+		putchar(dst2[i]);
 	putchar('\n');
 
 	free(basebuf);
@@ -162,7 +180,7 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 	if (!(buf = malloc(bufsz)))
 		goto fail;
 
-	printf("blk len: %zu (orig: %zu, elem: %zu)\n", msglen, msglen, elemsz);
+	printf("blk len: %zu (orig: %zu, elem: %zu)\n", bufsz, msglen, elemsz);
 
 	rsa_encrypt(buf, msg, msglen + 1, pub, priv, m);
 
