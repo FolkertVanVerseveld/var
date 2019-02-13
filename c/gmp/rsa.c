@@ -1,3 +1,13 @@
+// Licensed under Lesser General Public License version 3
+/*
+Small demo with rsa encryption/decryption
+Copyright Folkert van Verseveld
+
+Note that the example is just for illustration purposes and not suitable for
+real use, because the encrypted message is stored per byte, which means that
+even though the stored numbers are really large, there are only 256 distinct
+ones which greatly reduces security.
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,7 +158,7 @@ void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, cons
 	basebuf = malloc(elemsz + 1);
 
 	for (size_t i = 0; i < size; i += elemsz) {
-		strncpy(basebuf, &blk[i], elemsz + 1);
+		strncpy(basebuf, &blk[i], elemsz);
 		basebuf[elemsz] = '\0';
 
 		mpz_set_str(base, basebuf, 16);
@@ -157,7 +167,6 @@ void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, cons
 
 		*dst++ = mpz_get_ui(ch);
 	}
-	// plain = [chr(pow(char, key, n)) for char in ciphertext]
 
 	free(basebuf);
 	mpz_clear(ch);
@@ -197,8 +206,6 @@ fail:
 	mpz_clear(base);
 	return err;
 }
-
-#define PRNG_ROUNDS 100
 
 int main(void)
 {
