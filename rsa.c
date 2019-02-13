@@ -101,12 +101,13 @@ fail:
 	return err;
 }
 
+// XXX use int (malloc may fail?)
 void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t m)
 {
-	size_t elemsz, dstsz = 0;
+	size_t elemsz;
 	mpz_t base, elem;
 	const unsigned char *data;
-	char *basebuf, *dst2 = dst;
+	char *basebuf;
 	mpz_init(base);
 	mpz_init(elem);
 
@@ -209,8 +210,20 @@ int main(void)
 	mpz_t p, q, pub, priv, m;
 	mpz_inits(p, q, pub, priv, m, NULL);
 
-	mpz_set_ui(p, 23);
-	mpz_set_ui(q, 19);
+	unsigned bits = 128;
+	int reps = 40;
+
+	while (1) {
+		mpz_urandomb(p, prng, bits);
+		if (!mpz_probab_prime_p(p, reps))
+			continue;
+		mpz_urandomb(q, prng, bits);
+		if (!mpz_probab_prime_p(q, reps))
+			continue;
+		break;
+	}
+
+	gmp_printf("p: %Zd\nq: %Zd\n", p, q);
 
 	err = gen_keypair(&pub, &priv, &m, &prng, p, q);
 	if (err)
