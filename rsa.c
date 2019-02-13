@@ -1,10 +1,7 @@
-/*
-TODO rsa encryption/decryption demo
-TODO rip java biginteger prime generation
-*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <gmp.h>
 
 #define GK_TRIES 5
@@ -201,17 +198,21 @@ fail:
 	return err;
 }
 
+#define PRNG_ROUNDS 100
+
 int main(void)
 {
 	int err;
 	gmp_randstate_t prng;
-	gmp_randinit_mt(prng);
-
+	unsigned bits, reps;
 	mpz_t p, q, pub, priv, m;
-	mpz_inits(p, q, pub, priv, m, NULL);
 
-	unsigned bits = 128;
-	int reps = 40;
+	mpz_inits(p, q, pub, priv, m, NULL);
+	gmp_randinit_mt(prng);
+	srand(time(NULL));
+
+	bits = 256 + (unsigned)(16.0f * rand() / RAND_MAX);
+	reps = 40 + (unsigned)(10.0f * rand() / RAND_MAX);
 
 	while (1) {
 		mpz_urandomb(p, prng, bits);

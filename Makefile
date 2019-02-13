@@ -10,7 +10,7 @@ default: $(BIN)
 test: test.c
 rsa: rsa.c
 run: rsa
-	./rsa
+	timeout 3 ./rsa
 	@#valgrind --leak-check=full ./rsa
 
 clean:
