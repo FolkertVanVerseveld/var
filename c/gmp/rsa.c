@@ -17,6 +17,12 @@ ones which greatly reduces security.
 #define GK_TRIES 5
 #define KP_TRIES 100
 
+static const unsigned char atohex[256] = {
+	['0'] = 0, ['1'] = 1, ['2'] = 2, ['3'] = 3, ['4'] = 4, ['5'] = 5, ['6'] = 6, ['7'] = 7,
+	['A'] = 10, ['B'] = 11, ['C'] = 12, ['D'] = 13, ['E'] = 14, ['F'] = 15,
+	['8'] = 8, ['9'] = 9, ['a'] = 10, ['b'] = 11, ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15,
+};
+
 int gen_keypair(mpz_t *pub, mpz_t *priv, mpz_t *k, gmp_randstate_t *prng, const mpz_t p, const mpz_t q)
 {
 	int err = 1;
@@ -65,7 +71,7 @@ again:
 
 	while (mpz_cmp_ui(e2, 0) > 0) {
 		// temp1 = temp_phi / e
-		mpz_fdiv_q(i0, rem, e2);
+		mpz_tdiv_q(i0, rem, e2);
 		// x = temp1 * e
 		mpz_mul(x, i0, e2);
 		mpz_sub(i1, rem, x);
@@ -108,7 +114,8 @@ fail:
 	return err;
 }
 
-// XXX use int (malloc may fail?)
+// XXX use int (malloc may fail)
+// FIXME compute number of bytes that can fit in modulo
 void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t m)
 {
 	size_t elemsz;
@@ -117,6 +124,22 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 	char *basebuf;
 	mpz_init(base);
 	mpz_init(elem);
+
+	size_t items = 0;
+
+	mpz_set(base, m);
+	mpz_set(elem, m);
+
+	while (mpz_cmp_ui(base, 256) > 0) {
+		++items;
+		mpz_tdiv_q_ui(elem, base, 256);
+		if (mpz_cmp_ui(elem, 256) <= 0)
+			break;
+		++items;
+		mpz_tdiv_q_ui(base, elem, 256);
+	}
+
+	printf("items: %zu\n", items);
 
 	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
 	basebuf = malloc(elemsz + 1);
@@ -146,6 +169,144 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 	mpz_clear(base);
 }
 
+/* Compute number of elements and item size for encrypting and decrypting data. */
+void rsa_bufstat(size_t size, const mpz_t m, size_t *count, size_t *elemsz)
+{
+	size_t items = 0;
+	mpz_t base, elem;
+
+	mpz_init(base);
+	mpz_init(elem);
+
+	*elemsz = mpz_sizeinbase(m, 256);
+
+	mpz_set(base, m);
+	mpz_set(elem, m);
+
+	// count bytes pack count for m
+	while (mpz_cmp_ui(base, 256) > 0) {
+		++items;
+		mpz_tdiv_q_ui(elem, base, 256);
+		if (mpz_cmp_ui(elem, 256) <= 0)
+			break;
+		++items;
+		mpz_tdiv_q_ui(base, elem, 256);
+	}
+
+	*count = (size - 1) / items + 1;
+
+	mpz_clear(elem);
+	mpz_clear(base);
+}
+
+int rsa_encrypt2(char *dst, const void *src, size_t size, const mpz_t pub, const mpz_t m)
+{
+	size_t items, elemsz, bufsz;
+	mpz_t sum, base, elem, k, tmp;
+	char *basebuf;
+	const unsigned char *data;
+
+	rsa_bufstat(size, m, &items, &elemsz);
+	printf("count: %zu, items: %zu, elemsz: %zu\n", size, items, elemsz);
+	// +1 may not be necessary, but better safe than sorry
+	bufsz = 2 * elemsz + 1;
+
+	if (!(basebuf = malloc(bufsz)))
+		return 1;
+
+	mpz_inits(sum, base, elem, k, tmp, NULL);
+
+	data = src;
+
+	for (size_t i = 0; i < size; i += elemsz) {
+		mpz_set_ui(k, 1);
+		mpz_set_ui(sum, 0);
+
+		size_t end = i + elemsz;
+		if (end > size)
+			end = size;
+
+		for (size_t j = i; j < end; ++j) {
+			// compute item sum
+			mpz_set_ui(base, 0);
+			mpz_addmul_ui(base, k, data[j]);
+			mpz_add(elem, sum, base);
+			mpz_set(sum, elem);
+
+			// update multiplier for next byte
+			mpz_swap(tmp, k);
+			mpz_mul_ui(k, tmp, 256);
+		}
+		gmp_printf("sum : %*ZX\n", 2 * elemsz, sum);
+		mpz_powm(elem, sum, pub, m);
+		gmp_printf("elem: %*ZX\n", 2 * elemsz, elem);
+
+		memset(basebuf, 0, bufsz);
+		mpz_get_str(basebuf, 16, elem);
+
+		basebuf[bufsz - 1] = '\0';
+
+		// compression step
+		// determine length
+		size_t nhex = strlen(basebuf);
+		size_t pad = 2 * elemsz - nhex;
+
+		printf("pad: %zu\n", pad);
+
+		// pack basebuf and store in dst
+		const char *from = dst;
+
+		// FIXME padding
+		if (pad) {
+			size_t shift, k = 0, j;
+
+			for (shift = pad >> 1; shift; --shift)
+				*dst++ = 0;
+
+			j = i + (pad >> 1);
+
+			if (pad & 1) {
+				#if 0
+				*dst++ = atohex[basebuf[0] & 0xf];
+
+				for (size_t j = i, k = 1; j < i + elemsz; ++j, k += 2)
+					*dst++ = atohex[basebuf[k]] << 4 | atohex[basebuf[k + 1]];
+				#else
+				*dst = 0;
+
+				// odd padding is tricker, we may overrun basebuf.
+				for (; j < i + elemsz - 1; ++j, k += 2) {
+					*dst++ |= atohex[(unsigned char)basebuf[k]];
+					*dst = atohex[(unsigned char)basebuf[k + 1]] << 4;
+				}
+				*dst++ |= atohex[(unsigned char)basebuf[k] & 0xff];
+				if (k + 2 < bufsz)
+					*dst = atohex[(unsigned char)basebuf[k + 1]] << 4;
+				#endif
+			} else {
+				for (; j < i + elemsz; ++j, k += 2)
+					*dst++ = atohex[(unsigned char)basebuf[k]] << 4 | atohex[(unsigned char)basebuf[k + 1]];
+			}
+		} else {
+			for (size_t j = i + (pad >> 1), k = 0; j < i + elemsz; ++j, k += 2)
+				*dst++ = atohex[(unsigned char)basebuf[k]] << 4 | atohex[(unsigned char)basebuf[k + 1]];
+		}
+
+		// dump to test if it worked
+		printf("elemsz: %zu\n      ", elemsz);
+		for (size_t k = 0; k < elemsz; ++k)
+			printf("%02X", from[k] & 0xff);
+		putchar('\n');
+	}
+
+	mpz_clears(tmp, k, elem, base, sum, NULL);
+	free(basebuf);
+
+	return 0;
+}
+
+// XXX use int (malloc may fail)
+// FIXME compute number of bytes that can fit in modulo
 void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, const mpz_t m)
 {
 	size_t elemsz;
@@ -176,7 +337,7 @@ void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, cons
 int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 {
 	int err = 1;
-	size_t msglen, elemsz, bufsz;
+	size_t msglen, elemsz, bufsz, items;
 	char *basebuf = NULL, *buf = NULL, *orig = NULL;
 	mpz_t base, elem;
 	mpz_init(base);
@@ -196,6 +357,15 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 	printf("decrypted: %s\n", orig);
 
 	puts(strcmp(msg, orig) ? "fail" : "ok");
+
+	free(orig);
+	rsa_bufstat(msglen + 1, m, &items, &elemsz);
+	bufsz = items * elemsz + 1;
+	printf("bufsz: %zu\n", bufsz);
+	if (!(orig = malloc(bufsz)))
+		goto fail;
+
+	rsa_encrypt2(orig, msg, msglen + 1, pub, m);
 
 	err = 0;
 fail:
@@ -231,14 +401,14 @@ int main(void)
 		break;
 	}
 
-	gmp_printf("p: %Zd\nq: %Zd\n", p, q);
+	gmp_printf("p: %ZX\nq: %ZX\n", p, q);
 
 	err = gen_keypair(&pub, &priv, &m, &prng, p, q);
 	if (err)
 		goto fail;
 	// dump keys
-	gmp_printf("public key: (%Zd, %Zd)\n", pub, m);
-	gmp_printf("private key: (%Zd, %Zd)\n", priv, m);
+	gmp_printf("public key: (%ZX, %ZX)\n", pub, m);
+	gmp_printf("private key: (%ZX, %ZX)\n", priv, m);
 
 	err = test_rsa("whoah", pub, priv, m);
 	if (err)
