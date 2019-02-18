@@ -416,9 +416,48 @@ int rsa_enc2(void *dst, const void *src, size_t rounds, const mpz_t pub, const m
 	return 0;
 }
 
-int rsa_dec2(void *dst, const void *src)
+int rsa_dec2(void *dst, const void *src, size_t rounds, const mpz_t priv, const mpz_t m, size_t items, size_t msz)
 {
 	// FIXME stub
+	mpz_t base, ch;
+	unsigned char *to = dst;
+	const unsigned char *from = src;
+	// hexadecimal stringified scratch buffer for `m'
+	char *rwbuf;
+	size_t bufsz;
+
+	bufsz = 2 * msz + 1;
+	if (!(rwbuf = malloc(bufsz)))
+		return 1;
+
+	mpz_init(base);
+	mpz_init(ch);
+
+	for (size_t i = 0; i < rounds; ++i) {
+		size_t j, k;
+
+		for (j = 0, k = 0; j < msz; ++j, k += 2) {
+			rwbuf[k] = str_hex_lo[*from >> 4];
+			rwbuf[k + 1] = str_hex_lo[*from & 0xf];
+			++from;
+		}
+		rwbuf[k] = '\0';
+
+		mpz_set_str(base, rwbuf, 16);
+		gmp_printf("read: %0*ZX\n", 2 * msz, base);
+
+		mpz_powm(ch, base, priv, m);
+		gmp_sprintf(rwbuf, "%0*ZX", 2 * msz, ch);
+		printf("decr: %s\n", rwbuf);
+
+		// depack and write bytes in reversed order
+		for (j = 2 * msz; j > 2; j -= 2)
+			*to++ = atohex[(unsigned char)rwbuf[j - 1]] | atohex[(unsigned char)rwbuf[j - 2]] << 4;
+	}
+
+	mpz_clear(ch);
+	mpz_clear(base);
+	free(rwbuf);
 	return 0;
 }
 
@@ -464,7 +503,7 @@ int test_rsa2(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 		goto fail;
 
 	memset(rwbuf0, 0, rwbufsz);
-	if ((err = rsa_dec2(rwbuf0, rwbuf1)))
+	if ((err = rsa_dec2(rwbuf0, rwbuf1, rwbufsz / msz, priv, m, items, msz)))
 		goto fail;
 
 	printf("decrypted: %s\n", rwbuf0);
