@@ -136,20 +136,6 @@ void rsa_encrypt(char *dst, const void *src, size_t size, const mpz_t pub, const
 	mpz_set(base, m);
 	mpz_set(elem, m);
 
-	// TODO remove this
-	#if 0
-	while (mpz_cmp_ui(base, 256) > 0) {
-		++items;
-		mpz_tdiv_q_ui(elem, base, 256);
-		if (mpz_cmp_ui(elem, 256) <= 0)
-			break;
-		++items;
-		mpz_tdiv_q_ui(base, elem, 256);
-	}
-
-	printf("items: %zu\n", items);
-	#endif
-
 	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
 	basebuf = malloc(elemsz + 1);
 	data = src;
@@ -247,7 +233,6 @@ int rsa_encrypt2(char *dst, const void *src, size_t size, const mpz_t pub, const
 		}
 		gmp_printf("sum : %0*ZX\n", 2 * elemsz, sum);
 		mpz_powm(elem, sum, pub, m);
-		gmp_printf("elem: %0*ZX\n", 2 * elemsz, elem);
 
 		memset(basebuf, 0, bufsz);
 		gmp_sprintf(basebuf, "%0*ZX", 2 * elemsz, elem);
@@ -349,6 +334,167 @@ int rsa_decrypt2(void *dst, const void *blk, size_t blksz, size_t size, const mp
 	return 0;
 }
 
+int test_rsa1(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
+{
+	int err = 1;
+	size_t msglen, elemsz, bufsz, items;
+	char *basebuf = NULL, *buf = NULL, *orig = NULL, *ptr;
+	mpz_t base, elem;
+	mpz_init(base);
+	mpz_init(elem);
+
+	// setup buffers
+	msglen = strlen(msg) + 1;
+	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
+	bufsz = msglen * elemsz;
+
+	if (!(buf = malloc(bufsz)) || !(orig = calloc(msglen, 1)))
+		goto fail;
+
+	// dump buffer info
+	printf("blk len: %zu (orig: %zu, elem: %zu)\n", bufsz, msglen, elemsz);
+
+	rsa_encrypt(buf, msg, msglen, pub, m);
+	rsa_decrypt(orig, buf, bufsz, priv, m);
+
+	printf("decrypted: %s\n", orig);
+	puts(strcmp(msg, orig) ? "fail" : "ok");
+
+	err = 0;
+fail:
+	free(orig);
+	free(basebuf);
+	free(buf);
+	mpz_clear(elem);
+	mpz_clear(base);
+	return err;
+}
+
+int rsa_enc2(void *dst, const void *src, size_t rounds, const mpz_t pub, const mpz_t m, size_t items, size_t msz)
+{
+	mpz_t sum, base, elem, k, tmp;
+	unsigned char *to = dst;
+	const unsigned char *from = src;
+	// hexadecimal stringified scratch buffer for `m'
+	char *basebuf;
+	size_t bufsz;
+
+	bufsz = 2 * msz + 1;
+	if (!(basebuf = malloc(bufsz)))
+		return 1;
+
+	mpz_inits(sum, base, elem, k, tmp, NULL);
+
+	for (size_t i = 0; i < rounds; ++i) {
+		mpz_set_ui(k, 1);
+		mpz_set_ui(sum, 0);
+
+		for (size_t j = 0; j < items; ++j) {
+			// compute item sum
+			mpz_set_ui(base, 0);
+			mpz_addmul_ui(base, k, *from++);
+			mpz_add(elem, sum, base);
+			mpz_set(sum, elem);
+
+			// update multiplier for next byte
+			mpz_swap(tmp, k);
+			mpz_mul_ui(k, tmp, 256);
+		}
+		gmp_printf("sum : %0*ZX\n", 2 * msz, sum);
+		mpz_powm(elem, sum, pub, m);
+
+		gmp_sprintf(basebuf, "%0*ZX", 2 * msz, elem);
+		printf("encr: %s\n", basebuf);
+
+		// pack basebuf and store in dst
+		for (size_t j = 0, k = 0; j < msz; ++j, k += 2)
+			*to++ = atohex[(unsigned char)basebuf[k]] << 4 | atohex[(unsigned char)basebuf[k + 1]];
+	}
+
+	free(basebuf);
+	mpz_clears(tmp, k, elem, base, sum, NULL);
+	return 0;
+}
+
+int rsa_dec2(void *dst, const void *src)
+{
+	// FIXME stub
+	return 0;
+}
+
+int test_rsa2(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
+{
+	int err = 1;
+	size_t msglen, items = 0, msz, rwbufsz;
+	char *rwbuf0 = NULL, *rwbuf1 = NULL;
+	mpz_t base, elem;
+
+	mpz_inits(base, elem, NULL);
+
+	// compute maximum number of bytes (i.e. items) that fit in m
+	mpz_set(base, m);
+	mpz_set(elem, m);
+
+	while (mpz_cmp_ui(base, 256) >= 0) {
+		++items;
+		mpz_tdiv_q_ui(elem, base, 256);
+		if (mpz_cmp_ui(elem, 256) < 0)
+			break;
+		++items;
+		mpz_tdiv_q_ui(base, elem, 256);
+	}
+
+	// NOTE storage size for m may be one bigger than `items'
+	mpz_set(elem, base);
+	msz = mpz_sgn(elem) ? items + 1 : items;
+
+	printf("m stats: items=%zu, size=%zu\n", items, msz);
+
+	// setup buffers
+	msglen = strlen(msg) + 1;
+	rwbufsz = msz * ((msglen - 1) / msz + 1);
+
+	printf("rw stats: size=%zu, data_size=%zu\n", rwbufsz, msglen);
+
+	if (!(rwbuf0 = calloc(rwbufsz, 1)) || !(rwbuf1 = calloc(rwbufsz, 1)))
+		goto fail;
+
+	strcpy(rwbuf0, msg);
+	if ((err = rsa_enc2(rwbuf1, rwbuf0, rwbufsz / msz, pub, m, items, msz)))
+		goto fail;
+
+	memset(rwbuf0, 0, rwbufsz);
+	if ((err = rsa_dec2(rwbuf0, rwbuf1)))
+		goto fail;
+
+	printf("decrypted: %s\n", rwbuf0);
+	puts(strcmp(rwbuf0, msg) ? "fail" : "ok");
+	err = 0;
+fail:
+	free(rwbuf1);
+	free(rwbuf0);
+	mpz_clears(elem, base, NULL);
+	return err;
+}
+
+#if 1
+int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
+{
+	int err;
+
+	printf("to encrypt: \"%s\"\n", msg);
+	puts("-- rsa 1.0 --");
+
+	if ((err = test_rsa1(msg, pub, priv, m)))
+		return err;
+	puts("-- rsa 2.0 --");
+	if ((err = test_rsa2(msg, pub, priv, m)))
+		return err;
+
+	puts("-------------");
+	return 0;
+}
+#else
 int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 {
 	int err = 1;
@@ -358,8 +504,7 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 	mpz_init(base);
 	mpz_init(elem);
 
-	#if 0
-
+	#if 1
 	msglen = strlen(msg) + 1;
 	elemsz = 2 * ((mpz_sizeinbase(m, 16) - 1) / 2 + 1);
 	bufsz = msglen * elemsz;
@@ -438,6 +583,7 @@ fail:
 	mpz_clear(base);
 	return err;
 }
+#endif
 
 int main(void)
 {
