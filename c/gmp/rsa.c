@@ -23,6 +23,8 @@ static const unsigned char atohex[256] = {
 	['8'] = 8, ['9'] = 9, ['a'] = 10, ['b'] = 11, ['c'] = 12, ['d'] = 13, ['e'] = 14, ['f'] = 15,
 };
 
+const char *str_hex_lo = "0123456789abcdef";
+
 int gen_keypair(mpz_t *pub, mpz_t *priv, mpz_t *k, gmp_randstate_t *prng, const mpz_t p, const mpz_t q)
 {
 	int err = 1;
@@ -256,7 +258,6 @@ int rsa_encrypt2(char *dst, const void *src, size_t size, const mpz_t pub, const
 		// pack basebuf and store in dst
 		const char *from = dst;
 
-		// FIXME padding
 		if (pad) {
 			size_t shift, k = 0, j;
 
@@ -266,12 +267,6 @@ int rsa_encrypt2(char *dst, const void *src, size_t size, const mpz_t pub, const
 			j = i + (pad >> 1);
 
 			if (pad & 1) {
-				#if 0
-				*dst++ = atohex[basebuf[0] & 0xf];
-
-				for (size_t j = i, k = 1; j < i + elemsz; ++j, k += 2)
-					*dst++ = atohex[basebuf[k]] << 4 | atohex[basebuf[k + 1]];
-				#else
 				*dst = 0;
 
 				// odd padding is tricker, we may overrun basebuf.
@@ -282,15 +277,12 @@ int rsa_encrypt2(char *dst, const void *src, size_t size, const mpz_t pub, const
 				*dst++ |= atohex[(unsigned char)basebuf[k] & 0xff];
 				if (k + 2 < bufsz)
 					*dst = atohex[(unsigned char)basebuf[k + 1]] << 4;
-				#endif
-			} else {
+			} else
 				for (; j < i + elemsz; ++j, k += 2)
 					*dst++ = atohex[(unsigned char)basebuf[k]] << 4 | atohex[(unsigned char)basebuf[k + 1]];
-			}
-		} else {
+		} else
 			for (size_t j = i + (pad >> 1), k = 0; j < i + elemsz; ++j, k += 2)
 				*dst++ = atohex[(unsigned char)basebuf[k]] << 4 | atohex[(unsigned char)basebuf[k + 1]];
-		}
 
 		// dump to test if it worked
 		printf("elemsz: %zu\n      ", elemsz);
@@ -334,11 +326,63 @@ void rsa_decrypt(char *dst, const char *blk, size_t size, const mpz_t priv, cons
 	mpz_clear(base);
 }
 
+int rsa_decrypt2(void *dst, const void *blk, size_t blksz, size_t size, const mpz_t priv, const mpz_t m)
+{
+	size_t items, elemsz, readsz;
+	char *rwbuf;
+	unsigned char *data;
+	const unsigned char *src;
+	mpz_t base, ch;
+
+	rsa_bufstat(size, m, &items, &elemsz);
+	readsz = 2 * elemsz + 1;
+	if (!(rwbuf = malloc(readsz)))
+		return 1;
+
+	mpz_init(base);
+	mpz_init(ch);
+
+	printf("blksz: %zu, size: %zu, items: %zu, elemsz: %zu\n", blksz, size, items, elemsz);
+	data = dst;
+	src = blk;
+
+	for (size_t i = 0; i < blksz; i += elemsz) {
+		size_t end = i + elemsz;
+		if (end > blksz)
+			end = blksz;
+		memset(rwbuf, 0, readsz);
+
+		for (size_t j = i, k = 0; j < end; ++j, k += 2) {
+			rwbuf[k] = str_hex_lo[src[j] >> 4];
+			rwbuf[k + 1] = str_hex_lo[src[j] & 0xf];
+		}
+		rwbuf[readsz - 1] = '\0';
+
+		mpz_set_str(base, rwbuf, 16);
+		gmp_printf("read: %*ZX\n", 2 * elemsz, base);
+
+		mpz_powm(ch, base, priv, m);
+		//gmp_printf("decrypted: %ZX\n", ch);
+		gmp_sprintf(rwbuf, "%0*ZX", 2 * elemsz, ch);
+		printf("decrypted: %s\n", rwbuf);
+
+		// depack and write bytes in reversed order
+		for (size_t j = readsz - 1; j > 2 && size; j -= 2, --size)
+			*data++ = atohex[(unsigned char)rwbuf[j - 1]] | atohex[(unsigned char)rwbuf[j - 2]] << 4;
+	}
+
+	free(rwbuf);
+	mpz_clear(ch);
+	mpz_clear(base);
+
+	return 0;
+}
+
 int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 {
 	int err = 1;
 	size_t msglen, elemsz, bufsz, items;
-	char *basebuf = NULL, *buf = NULL, *orig = NULL;
+	char *basebuf = NULL, *buf = NULL, *orig = NULL, *ptr;
 	mpz_t base, elem;
 	mpz_init(base);
 	mpz_init(elem);
@@ -358,14 +402,19 @@ int test_rsa(const char *msg, const mpz_t pub, const mpz_t priv, const mpz_t m)
 
 	puts(strcmp(msg, orig) ? "fail" : "ok");
 
-	free(orig);
 	rsa_bufstat(msglen + 1, m, &items, &elemsz);
-	bufsz = items * elemsz + 1;
+	bufsz = items * elemsz + 1; // FIXME +1 to prevent overflow for some reason
 	printf("bufsz: %zu\n", bufsz);
-	if (!(orig = malloc(bufsz)))
+	if (!(ptr = realloc(buf, bufsz)))
 		goto fail;
+	buf = ptr;
 
-	rsa_encrypt2(orig, msg, msglen + 1, pub, m);
+	rsa_encrypt2(buf, msg, msglen + 1, pub, m);
+	// FIXME bufsz - 1 for previous FIXME
+	rsa_decrypt2(orig, buf, bufsz - 1, msglen + 1, priv, m);
+	printf("decrypted: %s\n", orig);
+
+	puts(strcmp(msg, orig) ? "fail" : "ok");
 
 	err = 0;
 fail:
