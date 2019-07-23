@@ -8,7 +8,7 @@ are not suitable for real use, because the encrypted message is stored per byte,
 which means that even though the stored numbers are really large, there are only
 256 distinct ones which greatly reduces security.
 
-See test_rsa2 for a better, more efficient, more secure demonstration.
+See test_rsa2() for a better, more efficient, more secure demonstration.
 */
 #include <stdio.h>
 #include <stdlib.h>

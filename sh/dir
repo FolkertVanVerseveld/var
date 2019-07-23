@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# tool that acts similar to `ls', but also takes .gitignore into account
+IFS="
+"
+has_git=n
+
+while IFS='/' read -a path; do
+	prefix=""
+	for ((i=0; i < ${#path[@]}; i++)); do
+		dir="$prefix${path[i]}"
+		prefix="$dir/"
+		if [ -d "$dir/.git" ]; then
+			has_git=y
+		fi
+	done
+
+	if [ ! -d "$prefix" ]; then
+		prefix="${prefix%/}"
+	fi
+
+	if [ "$has_git" = y ]; then
+		pushd "$prefix" >/dev/null
+		# fetch all files from current dir
+		files=($(git ls-files | cut -d/ -f1 | uniq))
+		#ls --color=auto -CF -d "${files[@]}"
+		ls --color=auto -CF "${files[@]}"
+		popd >/dev/null
+	else
+		ls --color=auto -CF $prefix
+	fi
+done < <(echo "$@")
