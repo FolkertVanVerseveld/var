@@ -1,44 +1,43 @@
 // public domain
-import java.io.PrintStream;
-import java.text.NumberFormat;
 
 /**
-Simple test that creates *a lot* of circular references.
-If memory keeps growing, this may indicate that the JVM
-can not release the objects because the references are
-circular.
-
-The code looks weird because I lost the source and had to decompile it :p
-*/
+ * Simple test to observe how JVM Garbage Collection with circular references.
+ * @author Folkert van Verseveld
+ */
 public final class GCTest {
 	GCTest ref;
 
-	GCTest(GCTest paramGCTest) {
-		this.ref = paramGCTest;
+	GCTest(GCTest ref) {
+		this.ref = ref;
 	}
 
-	public static final void dumpStuff() {
-		Runtime runtime = Runtime.getRuntime();
-		NumberFormat nf = NumberFormat.getInstance();
-		StringBuilder sb = new StringBuilder();
-		long l1 = runtime.maxMemory();
-		long l2 = runtime.totalMemory();
-		long l3 = runtime.freeMemory();
-		sb.append("free memory: " + nf.format(l3 / 1024L) + "\n");
-		sb.append("allocated memory: " + nf.format(l2 / 1024L) + "\n");
-		sb.append("max memory: " + nf.format(l1 / 1024L) + "\n");
-		sb.append("total free memory: " + nf.format((l3 + (l1 - l2)) / 1024L) + "\n");
-		System.out.println(sb.toString());
+	public static final void printMemoryStatistics() {
+		Runtime rt = Runtime.getRuntime();
+
+		// fetch state once as it may change during the format call
+		long free = rt.freeMemory(), alloc = rt.totalMemory(), max = rt.maxMemory();
+
+		System.out.format(
+			"free memory      : %d KB\n" +
+			"allocated memory : %d KB\n" +
+			"max memory       : %d KB\n" +
+			"total free memory: %d KB\n",
+			free / 1024L, alloc / 1024L, max / 1024L, (free + max - alloc) / 1024L);
 	}
 
-	public static final void main(String[] paramArrayOfString) {
-		for (long l = 0L; l < 1073741824L; l += 1L) {
+	public static void main(String args[]) {
+		printMemoryStatistics();
+
+		// create a lot of circular references and release them
+		for (long l = 0L; l < 1073741824L; ++l) {
 			GCTest a = new GCTest(null);
 			GCTest b = new GCTest(a);
 			a.ref = b;
 			a = null;
 			b = null;
 		}
-		dumpStuff();
+
+		printMemoryStatistics();
 	}
 }
+
